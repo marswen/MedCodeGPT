@@ -1,5 +1,6 @@
-langchain==0.2.2
-langchain_community==0.2.3
+openai==1.32.0
+langchain==0.2.3
+langchain_community==0.2.4
 python-dotenv==1.0.1
 PyYAML==6.0.1
 streamlit==1.32.0
