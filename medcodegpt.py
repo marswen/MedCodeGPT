@@ -38,6 +38,28 @@ def search_reference(code):
     return '\n'.join([line for line in code_book if re.search(re.escape(code), line, re.I) is not None])
 
 
+def lookup_code(code):
+    std_codes = list()
+    if re.search('[\:：]', code) is not None:
+        code = re.split('[\:：]', code)[-1].strip()
+    if re.search('^[A-Z]-', code):
+        code = '-'.join(code.split('-')[1:])
+    if code in term_map:
+        std_codes.append(code)
+    if re.search('\d\.\-', code):
+        related_codes = [x for x in term_map.keys() if x.startswith(code.strip('-'))]
+        for rel in related_codes:
+            if rel in term_map:
+                std_codes.append(rel)
+    if re.search('\d\.\d\-\d', code):
+        code_compo = re.search('(.*\d\.)(\d)\-(\d)', code)
+        related_codes = [code_compo.group(1) + str(x) for x in
+                         range(int(code_compo.group(2)), int(code_compo.group(3)) + 1)]
+        related_codes = [x for x in related_codes if x in term_map]
+        std_codes.extend(related_codes)
+    return std_codes
+
+
 def generate(context, chat_llm, callbacks, output_container):
     system_message = SystemMessage(content=prompts.prompt1)
     related_icd10 = icd10_semantic_search.search(context, k=5)
@@ -60,28 +82,12 @@ def generate(context, chat_llm, callbacks, output_container):
         json_text = re.search('```json(.+)```', format_result.content, re.DOTALL)
         if json_text is not None:
             json_data = json.loads(json_text.group(1))
-            references = ''
             for code in json_data['code'][:3]:
-                if re.search('[\:：]', code) is not None:
-                    code = re.split('[\:：]', code)[-1].strip()
-                if re.search('^[A-Z]-', code):
-                    code = '-'.join(code.split('-')[1:])
-                ref = term_map.get(code)
-                if ref is not None:
-                    references += f'{code}:\n{ref}\n\n'
-                if re.search('\d\.\-', code):
-                    related_codes = [x for x in term_map.keys() if x.startswith(code.strip('-'))]
-                    for rel in related_codes:
-                        ref = term_map.get(rel)
-                        references += f'{rel}:\n{ref}\n\n'
-                if re.search('\d\.\d\-\d', code):
-                    code_compo = re.search('(.*\d\.)(\d)\-(\d)', code)
-                    related_codes = [code_compo.group(1) + str(x) for x in
-                                     range(int(code_compo.group(2)), int(code_compo.group(3)) + 1)]
-                    related_codes = [x for x in related_codes if x in term_map]
-                    for rel in related_codes:
-                        ref = term_map.get(rel)
-                        references += f'{rel}:\n{ref}\n\n'
+                std_codes = lookup_code(code)
+                if re.search('\s', code) is not None:
+                    for sub_code in re.split('\s', code):
+                        std_codes.extend(lookup_code(sub_code))
+            references = ''.join([f'{rel}:\n{term_map[rel]}\n\n' for rel in set(std_codes)])
             refine_user_prompt = PromptTemplate(template=prompts.prompt5, input_variables=['references']).format(references=references)
             refine_user_message = HumanMessage(content=refine_user_prompt)
             output_container.chat_message("user").write(refine_user_message.content.replace('\n', '\n\n'))
@@ -121,10 +127,6 @@ def demo_page():
         沪ICP备18007075号-2
     </p>
     """, unsafe_allow_html=True)
-    # st.write("""
-    # ---
-    # 沪ICP备18007075号-2
-    # """)
 
 
 if __name__ == '__main__':
