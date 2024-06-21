@@ -1,6 +1,5 @@
 import os
 import re
-import json
 import yaml
 import prompts
 import pandas as pd
@@ -22,20 +21,6 @@ term_df = term_df.loc[~term_df['Coding System'].isin(['ICD-O-3行为学编码', 
 term_map = dict(zip(term_df['Code'], term_df['释义']))
 icd10_semantic_search = SemanticSearch('./vs/icd10')
 icdo3_semantic_search = SemanticSearch('./vs/icdo3')
-
-
-def search_reference0(code):
-    code_comps = code.split('-')
-    if len(code_comps) > 1:
-        code = '-'.join(code.split('-')[1:])
-    return '\n'.join([line for line in code_book if re.search(re.escape(code), line, re.I) is not None])
-
-
-def search_reference(code):
-    code_comps = code.split('-')
-    if len(code_comps) > 1:
-        code = '-'.join(code.split('-')[1:])
-    return '\n'.join([line for line in code_book if re.search(re.escape(code), line, re.I) is not None])
 
 
 def lookup_code(code):
@@ -73,35 +58,7 @@ def generate(context, chat_llm, callbacks, output_container):
     second_user_message = HumanMessage(content=prompts.prompt3)
     output_container.chat_message("user").write(second_user_message.content.replace('\n', '\n\n'))
     second_result = chat_llm([system_message, initial_user_message, initial_result, second_user_message], callbacks=callbacks)
-    code_result = second_result
-    try_cnt = 0
-    while True:
-        format_user_prompt = HumanMessage(content=prompts.prompt4)
-        output_container.chat_message("user").write(format_user_prompt.content.replace('\n', '\n\n'))
-        format_result = chat_llm([code_result, format_user_prompt], callbacks=callbacks)
-        json_text = re.search('```json(.+)```', format_result.content, re.DOTALL)
-        if json_text is not None:
-            json_data = json.loads(json_text.group(1))
-            for code in json_data['code'][:3]:
-                std_codes = lookup_code(code)
-                if re.search('\s', code) is not None:
-                    for sub_code in re.split('\s', code):
-                        std_codes.extend(lookup_code(sub_code))
-            references = ''.join([f'{rel}:\n{term_map[rel]}\n\n' for rel in set(std_codes)])
-            refine_user_prompt = PromptTemplate(template=prompts.prompt5, input_variables=['references']).format(references=references)
-            refine_user_message = HumanMessage(content=refine_user_prompt)
-            output_container.chat_message("user").write(refine_user_message.content.replace('\n', '\n\n'))
-            refine_result = chat_llm([system_message, initial_user_message, initial_result, second_user_message, code_result, refine_user_message], callbacks=callbacks)
-            code_result = refine_result
-            if '"confirmed": true' in code_result.content:
-                break
-        try_cnt += 1
-        if try_cnt > 5:
-            break
-    format_user_prompt = HumanMessage(content=prompts.prompt4)
-    output_container.chat_message("user").write(format_user_prompt.content.replace('\n', '\n\n'))
-    format_result = chat_llm([code_result, format_user_prompt], callbacks=callbacks)
-    return format_result.content
+    return second_result.content
 
 
 def demo_page():
