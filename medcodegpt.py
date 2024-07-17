@@ -1,11 +1,8 @@
 import os
-import re
 import yaml
 import prompts
-import pandas as pd
 import streamlit as st
 import streamlit_authenticator as stauth
-from icd import SemanticSearch
 from dotenv import load_dotenv
 from yaml.loader import SafeLoader
 from langchain.prompts import PromptTemplate
@@ -16,41 +13,11 @@ from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 
 
 load_dotenv()
-term_df = pd.read_excel('ICD-10-ICD-O.xlsx')
-term_df = term_df.loc[~term_df['Coding System'].isin(['ICD-O-3行为学编码', 'ICD-O-3组织学等级和分化程度编码'])]
-term_map = dict(zip(term_df['Code'], term_df['释义']))
-icd10_semantic_search = SemanticSearch('./vs/icd10')
-icdo3_semantic_search = SemanticSearch('./vs/icdo3')
-
-
-def lookup_code(code):
-    std_codes = list()
-    if re.search('[\:：]', code) is not None:
-        code = re.split('[\:：]', code)[-1].strip()
-    if re.search('^[A-Z]-', code):
-        code = '-'.join(code.split('-')[1:])
-    if code in term_map:
-        std_codes.append(code)
-    if re.search('\d\.\-', code):
-        related_codes = [x for x in term_map.keys() if x.startswith(code.strip('-'))]
-        for rel in related_codes:
-            if rel in term_map:
-                std_codes.append(rel)
-    if re.search('\d\.\d\-\d', code):
-        code_compo = re.search('(.*\d\.)(\d)\-(\d)', code)
-        related_codes = [code_compo.group(1) + str(x) for x in
-                         range(int(code_compo.group(2)), int(code_compo.group(3)) + 1)]
-        related_codes = [x for x in related_codes if x in term_map]
-        std_codes.extend(related_codes)
-    return std_codes
 
 
 def generate(context, chat_llm, callbacks, output_container):
     system_message = SystemMessage(content=prompts.prompt1)
-    related_icd10 = icd10_semantic_search.search(context, k=5)
-    related_icdo3 = icdo3_semantic_search.search(context, k=5)
-    related_code_context = '\n'.join([f'{x[0]["Code"]}\n{x[0]["释义"]}' for x in related_icd10 + related_icdo3])
-    initial_user_prompt = PromptTemplate(template=prompts.prompt2, input_variables=['context', 'related_codes']).format(context=context, related_codes=related_code_context)
+    initial_user_prompt = PromptTemplate(template=prompts.prompt2, input_variables=['context', 'related_codes']).format(context=context)
     initial_user_message = HumanMessage(content=initial_user_prompt)
     output_container.chat_message("user").write(system_message.content.replace('\n', '\n\n'))
     output_container.chat_message("user").write(initial_user_message.content.replace('\n', '\n\n'))
