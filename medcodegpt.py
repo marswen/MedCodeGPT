@@ -1,5 +1,6 @@
 import os
 import yaml
+import utils
 import prompts
 import streamlit as st
 import streamlit_authenticator as stauth
@@ -8,14 +9,17 @@ from yaml.loader import SafeLoader
 from langchain.prompts import PromptTemplate
 from langchain.schema import SystemMessage, HumanMessage
 from langchain_community.chat_models import ChatOpenAI
+from langchain_community.chat_models.openai import convert_message_to_dict
 from custom_callbacks import CustomStreamlitCallbackHandler
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 
 
 load_dotenv()
+detail_logger = utils.DetailLogger()
 
 
 def generate(context, chat_llm, callbacks, output_container):
+    utils.logger.info('User input: {context}', context=context)
     system_message = SystemMessage(content=prompts.prompt1)
     initial_user_prompt = PromptTemplate(template=prompts.prompt2, input_variables=['context', 'related_codes']).format(context=context)
     initial_user_message = HumanMessage(content=initial_user_prompt)
@@ -25,6 +29,11 @@ def generate(context, chat_llm, callbacks, output_container):
     second_user_message = HumanMessage(content=prompts.prompt3)
     output_container.chat_message("user").write(second_user_message.content.replace('\n', '\n\n'))
     second_result = chat_llm([system_message, initial_user_message, initial_result, second_user_message], callbacks=callbacks)
+    utils.logger.info('Output: {result}', result=second_result.content)
+    detail_logger.add_record(
+        context,
+        [convert_message_to_dict(m) for m in
+         [system_message, initial_user_message, initial_result, second_user_message, second_result]])
     return second_result.content
 
 
