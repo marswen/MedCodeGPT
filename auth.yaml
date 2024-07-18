@@ -1,8 +1,8 @@
 credentials:
   usernames:
-    icd:
-      name: icd
-      password: '27182818'
+    shcdc:
+      name: shcdc
+      password: '1380'
 cookie:
   expiry_days: 1
   key: random_signature_key # Must be string

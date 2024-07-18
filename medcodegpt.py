@@ -1,6 +1,7 @@
 import os
 import re
 import yaml
+import utils
 import prompts
 import pandas as pd
 import streamlit as st
@@ -11,6 +12,7 @@ from yaml.loader import SafeLoader
 from langchain.prompts import PromptTemplate
 from langchain.schema import SystemMessage, HumanMessage
 from langchain_community.chat_models import ChatOpenAI
+from langchain_community.chat_models.openai import convert_message_to_dict
 from custom_callbacks import CustomStreamlitCallbackHandler
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 
@@ -21,6 +23,7 @@ term_df = term_df.loc[~term_df['Coding System'].isin(['ICD-O-3行为学编码', 
 term_map = dict(zip(term_df['Code'], term_df['释义']))
 icd10_semantic_search = SemanticSearch('./vs/icd10')
 icdo3_semantic_search = SemanticSearch('./vs/icdo3')
+detail_logger = utils.DetailLogger()
 
 
 def lookup_code(code):
@@ -46,6 +49,7 @@ def lookup_code(code):
 
 
 def generate(context, chat_llm, callbacks, output_container):
+    utils.logger.info('User input: {context}', context=context)
     system_message = SystemMessage(content=prompts.prompt1)
     related_icd10 = icd10_semantic_search.search(context, k=5)
     related_icdo3 = icdo3_semantic_search.search(context, k=5)
@@ -58,6 +62,11 @@ def generate(context, chat_llm, callbacks, output_container):
     second_user_message = HumanMessage(content=prompts.prompt3)
     output_container.chat_message("user").write(second_user_message.content.replace('\n', '\n\n'))
     second_result = chat_llm([system_message, initial_user_message, initial_result, second_user_message], callbacks=callbacks)
+    utils.logger.info('Output: {result}', result=second_result.content)
+    detail_logger.add_record(
+        context,
+        [convert_message_to_dict(m) for m in
+         [system_message, initial_user_message, initial_result, second_user_message, second_result]])
     return second_result.content
 
 
